@@ -1,0 +1,1525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cat Surfer: Vet Escape!</title>
+    <!-- Tailwind CSS for sleek UI layouts -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js 3D library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tone.js for dynamic synthesized game audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Google Font for arcade styling -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+
+    <style>
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            font-family: 'Fredoka One', 'Nunito', cursive, sans-serif;
+        }
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            outline: none;
+        }
+        .arcade-font {
+            font-family: 'Fredoka One', cursive;
+            text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.4);
+        }
+        .pulse-btn {
+            animation: pulse-glow 2s infinite ease-in-out;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.6)); }
+            50% { transform: scale(1.04); filter: drop-shadow(0 0 20px rgba(245, 158, 11, 0.9)); }
+        }
+        .shake-danger {
+            animation: danger-pulse 0.6s infinite alternate;
+        }
+        @keyframes danger-pulse {
+            from { border-color: rgba(239, 68, 68, 0.2); }
+            to { border-color: rgba(239, 68, 68, 0.8); }
+        }
+        /* Custom scrollbar for leaderboard/help if needed */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #f59e0b;
+            border-radius: 999px;
+        }
+    </style>
+</head>
+<body class="relative w-full h-full select-none overflow-hidden bg-slate-900 text-white">
+
+    <canvas id="game-canvas"></canvas>
+
+    <div id="hud-overlay" class="absolute inset-0 pointer-events-none z-10 flex flex-col justify-between p-4 md:p-6 transition-opacity duration-300">
+        <!-- Top Stats Bar -->
+        <div class="flex justify-between items-start w-full max-w-5xl mx-auto">
+            <!-- Left: Fish Treats & Multiplier -->
+            <div class="flex flex-col gap-2 pointer-events-auto">
+                <div class="flex items-center gap-3 bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-amber-500/40 shadow-lg shadow-amber-500/10">
+                    <span class="text-2xl filter drop-shadow">🐟</span>
+                    <div class="flex flex-col">
+                        <span class="text-xs text-amber-300 uppercase tracking-wider font-sans font-bold">Fish Bones</span>
+                        <span id="hud-fish-count" class="text-xl md:text-2xl font-black text-amber-400 arcade-font">0</span>
+                    </div>
+                </div>
+                <!-- Super Catnip Zoomies Gauge -->
+                <div id="zoomies-container" class="hidden flex-col gap-1 bg-black/60 backdrop-blur-md px-4 py-2 rounded-2xl border border-emerald-500/40 w-44">
+                    <div class="flex justify-between text-xs font-bold text-emerald-400">
+                        <span>⚡ ZOOMIES!</span>
+                        <span id="zoomies-timer">100%</span>
+                    </div>
+                    <div class="w-full bg-slate-700 h-2.5 rounded-full overflow-hidden">
+                        <div id="zoomies-bar" class="bg-gradient-to-r from-emerald-400 to-lime-300 h-full w-full transition-all duration-75"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Center: Distance & Score -->
+            <div class="flex flex-col items-center bg-black/60 backdrop-blur-md px-6 py-2 rounded-2xl border border-sky-500/40 shadow-lg">
+                <span class="text-xs text-sky-300 font-sans uppercase font-bold tracking-widest">Score</span>
+                <span id="hud-score" class="text-2xl md:text-4xl text-sky-400 font-black arcade-font">00000</span>
+                <span id="hud-distance" class="text-xs text-slate-300 font-mono">0m</span>
+            </div>
+
+            <!-- Right: Vet Danger Proximity & Audio Controls -->
+            <div class="flex items-center gap-3 pointer-events-auto">
+                <!-- Vet Danger Indicator -->
+                <div id="vet-danger-box" class="flex items-center gap-2 bg-rose-950/70 backdrop-blur-md border-2 border-rose-500/40 px-3 py-2 rounded-2xl shadow-lg transition-all">
+                    <span class="text-2xl animate-bounce">💉</span>
+                    <div class="flex flex-col">
+                        <span class="text-[10px] text-rose-300 uppercase font-sans font-bold tracking-wider">Vet Alert</span>
+                        <span id="vet-proximity-text" class="text-xs font-black text-rose-400 uppercase tracking-tighter">Safe</span>
+                    </div>
+                </div>
+                <!-- Mute / Sound Toggle Button -->
+                <button id="audio-toggle-btn" class="w-11 h-11 bg-black/60 backdrop-blur-md hover:bg-black/80 border border-slate-600 rounded-2xl flex items-center justify-center text-xl transition-transform active:scale-95 shadow-md" title="Toggle Sound">
+                    🔊
+                </button>
+            </div>
+        </div>
+
+        <!-- Bottom Touch On-Screen Controls for Mobile -->
+        <div class="w-full flex flex-col md:flex-row justify-between items-center gap-3 pb-2 pointer-events-auto">
+            <div class="text-xs text-slate-300 bg-black/40 px-3 py-1.5 rounded-xl border border-white/10 hidden md:block opacity-80">
+                ⌨️ <span class="font-bold text-amber-300">A / D</span> or <span class="font-bold text-amber-300">Arrows</span>: Switch Lane &bull; <span class="font-bold text-amber-300">W / Space</span>: Jump &bull; <span class="font-bold text-amber-300">S / Down</span>: Slide
+            </div>
+
+            <!-- On-Screen Touch Buttons for Mobile -->
+            <div class="flex md:hidden items-center justify-between w-full px-2">
+                <!-- Left & Right Lane Buttons -->
+                <div class="flex items-center gap-2">
+                    <button id="btn-touch-left" class="w-12 h-12 flex items-center justify-center bg-black/60 active:bg-amber-500/40 active:scale-90 border-2 border-amber-400/40 rounded-2xl text-xl font-black text-amber-300 shadow-lg select-none touch-manipulation">
+                        ◀
+                    </button>
+                    <button id="btn-touch-right" class="w-12 h-12 flex items-center justify-center bg-black/60 active:bg-amber-500/40 active:scale-90 border-2 border-amber-400/40 rounded-2xl text-xl font-black text-amber-300 shadow-lg select-none touch-manipulation">
+                        ▶
+                    </button>
+                </div>
+
+                <!-- Swipe instruction badge -->
+                <div class="text-[10px] text-amber-200 bg-black/50 px-2.5 py-1.5 rounded-xl border border-amber-400/20 text-center font-bold">
+                    👆 Swipe or Tap
+                </div>
+
+                <!-- Jump & Slide Buttons -->
+                <div class="flex items-center gap-2">
+                    <button id="btn-touch-slide" class="w-12 h-12 flex items-center justify-center bg-black/60 active:bg-sky-500/40 active:scale-90 border-2 border-sky-400/40 rounded-2xl text-xs font-black text-sky-300 shadow-lg select-none touch-manipulation">
+                        ▼ SLIDE
+                    </button>
+                    <button id="btn-touch-jump" class="w-12 h-12 flex items-center justify-center bg-black/60 active:bg-emerald-500/40 active:scale-90 border-2 border-emerald-400/40 rounded-2xl text-xs font-black text-emerald-300 shadow-lg select-none touch-manipulation">
+                        ▲ JUMP
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-modal" class="absolute inset-0 z-20 flex items-center justify-center bg-slate-950/85 backdrop-blur-md p-4">
+        <div class="max-w-md w-full bg-gradient-to-b from-slate-900 to-slate-950 border-2 border-amber-500/50 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
+            <!-- Decorative Cat & Syringe Accents -->
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/20 rounded-full blur-2xl"></div>
+            <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-rose-500/20 rounded-full blur-2xl"></div>
+
+            <div class="text-6xl mb-2 filter drop-shadow animate-bounce">🐱💨</div>
+            <h1 class="text-3xl md:text-4xl text-amber-400 arcade-font tracking-wide mb-1">CAT SURFER</h1>
+            <p class="text-rose-400 font-bold text-sm tracking-widest uppercase mb-4">Escape The Stethoscope!</p>
+
+            <div class="bg-slate-800/80 rounded-2xl p-4 w-full text-left text-sm text-slate-300 mb-6 border border-slate-700/80 space-y-2">
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">🏃</span>
+                    <span><strong>Dr. Snip</strong> is chasing you with a giant syringe! Don't let him give you your shots!</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">🐟</span>
+                    <span>Snack on <strong>Golden Fish Bones</strong> to rack up points.</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">🌿</span>
+                    <span>Grab <strong>Catnip Bags</strong> for invincible turbo-zoomies!</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-xl">🚧</span>
+                    <span>Jump over hurdles & slide beneath pet clinic barricades.</span>
+                </div>
+            </div>
+
+            <button id="start-game-btn" class="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xl rounded-2xl shadow-xl shadow-amber-500/30 transition-transform active:scale-95 pulse-btn arcade-font tracking-wider">
+                RUN KITTY, RUN! 🐾
+            </button>
+        </div>
+    </div>
+
+    <div id="gameover-modal" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-rose-950/80 backdrop-blur-lg p-4">
+        <div class="max-w-md w-full bg-slate-900 border-2 border-rose-500/60 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col items-center text-center relative overflow-hidden">
+            <div class="text-6xl mb-2 animate-pulse">💉😿</div>
+            <h2 class="text-3xl font-black text-rose-400 arcade-font tracking-wide mb-1">VACCINATED!</h2>
+            <p id="gameover-subtext" class="text-slate-300 text-sm font-semibold mb-6">Dr. Snip got you! "Time for your booster shots, kitty!"</p>
+
+            <div class="grid grid-cols-2 gap-3 w-full mb-6">
+                <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl flex flex-col items-center">
+                    <span class="text-xs text-slate-400 font-bold uppercase">Final Score</span>
+                    <span id="final-score" class="text-2xl font-black text-amber-400 arcade-font">0</span>
+                </div>
+                <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl flex flex-col items-center">
+                    <span class="text-xs text-slate-400 font-bold uppercase">Distance</span>
+                    <span id="final-distance" class="text-2xl font-black text-sky-400 arcade-font">0m</span>
+                </div>
+                <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl flex flex-col items-center">
+                    <span class="text-xs text-slate-400 font-bold uppercase">Fish Bones</span>
+                    <span id="final-fish" class="text-2xl font-black text-emerald-400 arcade-font">0</span>
+                </div>
+                <div class="bg-slate-800/80 border border-slate-700 p-3 rounded-2xl flex flex-col items-center">
+                    <span class="text-xs text-slate-400 font-bold uppercase">Best Run</span>
+                    <span id="best-score" class="text-2xl font-black text-purple-400 arcade-font">0</span>
+                </div>
+            </div>
+
+            <button id="restart-game-btn" class="w-full py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xl rounded-2xl shadow-xl shadow-emerald-500/30 transition-transform active:scale-95 arcade-font tracking-wider">
+                TRY ESCAPING AGAIN 🐱
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const CONFIG = {
+            laneWidth: 3.2,
+            // Camera views from -Z towards +Z, so +X is screen LEFT and -X is screen RIGHT
+            lanes: [3.2, 0, -3.2], // Lane 0: Left, Lane 1: Center, Lane 2: Right
+            initialSpeed: 24,
+            maxSpeed: 52,
+            speedIncrement: 0.8,
+            gravity: -42,
+            jumpImpulse: 16.5,
+            slideDuration: 0.65,
+            trackChunkLength: 60,
+            visibleChunks: 5,
+            vetCatchDistance: 2.2, // Game over if closer than this
+            vetMaxDistance: 12.0,   // Vet fallback distance when doing great
+            vetCatchSpeed: 4.5     // How fast vet catches up on stumbling
+        };
+
+        const STATE = {
+            isRunning: false,
+            isPaused: false,
+            score: 0,
+            distance: 0,
+            fishBones: 0,
+            speed: CONFIG.initialSpeed,
+            currentLane: 1, // 0: Left, 1: Center, 2: Right
+            targetLaneX: 0,
+            playerY: 0,
+            velocityY: 0,
+            isJumping: false,
+            isSliding: false,
+            slideTimer: 0,
+            isZoomies: false,
+            zoomiesTimer: 0,
+            vetDistance: 8.0, // Distance behind player
+            isStumbling: false,
+            soundMuted: false,
+            highScore: parseInt(localStorage.getItem('cat_surfer_best') || '0', 10)
+        };
+
+        class SoundEngine {
+            constructor() {
+                this.initialized = false;
+                this.synth = null;
+                this.bassSynth = null;
+                this.noiseSynth = null;
+            }
+
+            async init() {
+                if (this.initialized) return;
+                try {
+                    await Tone.start();
+                    // Lead sound for meows and pickups
+                    this.synth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: "triangle" },
+                        envelope: { attack: 0.01, decay: 0.1, sustain: 0.2, release: 0.3 }
+                    }).toDestination();
+                    this.synth.volume.value = -8;
+
+                    // Thump synth for jumps and bumps
+                    this.bassSynth = new Tone.MembraneSynth().toDestination();
+                    this.bassSynth.volume.value = -6;
+
+                    // Noise for sliding and wind
+                    this.noiseSynth = new Tone.NoiseSynth({
+                        noise: { type: "pink" },
+                        envelope: { attack: 0.02, decay: 0.2, sustain: 0 }
+                    }).toDestination();
+                    this.noiseSynth.volume.value = -12;
+
+                    this.initialized = true;
+                } catch (e) {
+                    console.warn("AudioContext setup error:", e);
+                }
+            }
+
+            playJump() {
+                if (STATE.soundMuted || !this.initialized) return;
+                const now = Tone.now();
+                this.bassSynth.triggerAttackRelease("C2", "8n", now);
+                this.synth.triggerAttackRelease("G4", "16n", now + 0.05);
+            }
+
+            playSlide() {
+                if (STATE.soundMuted || !this.initialized) return;
+                this.noiseSynth.triggerAttackRelease("8n");
+            }
+
+            playFish() {
+                if (STATE.soundMuted || !this.initialized) return;
+                const notes = ["E5", "G5", "B5", "E6"];
+                const pick = notes[Math.floor(Math.random() * notes.length)];
+                this.synth.triggerAttackRelease(pick, "16n");
+            }
+
+            playCatnip() {
+                if (STATE.soundMuted || !this.initialized) return;
+                this.synth.triggerAttackRelease(["C5", "E5", "G5", "C6"], "8n");
+            }
+
+            playStumble() {
+                if (STATE.soundMuted || !this.initialized) return;
+                this.bassSynth.triggerAttackRelease("G1", "4n");
+                this.synth.triggerAttackRelease("C3", "8n");
+            }
+
+            playGameOver() {
+                if (STATE.soundMuted || !this.initialized) return;
+                const now = Tone.now();
+                this.synth.triggerAttackRelease("E3", "8n", now);
+                this.synth.triggerAttackRelease("D#3", "8n", now + 0.15);
+                this.synth.triggerAttackRelease("D3", "4n", now + 0.3);
+            }
+        }
+
+        const audio = new SoundEngine();
+
+        const canvas = document.getElementById('game-canvas');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x70d6ff);
+        scene.fog = new THREE.Fog(0x70d6ff, 40, 180);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 300);
+        // Chasing camera angle
+        camera.position.set(0, 4.8, -8.5);
+        camera.lookAt(0, 1.8, 12);
+
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Sunlight / Directional Light with shadows
+        const sunLight = new THREE.DirectionalLight(0xfffaed, 1.3);
+        sunLight.position.set(25, 45, -20);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        sunLight.shadow.camera.near = 10;
+        sunLight.shadow.camera.far = 150;
+        sunLight.shadow.camera.left = -30;
+        sunLight.shadow.camera.right = 30;
+        sunLight.shadow.camera.top = 30;
+        sunLight.shadow.camera.bottom = -30;
+        scene.add(sunLight);
+
+        // Soft ambient sky/ground light
+        const hemiLight = new THREE.HemisphereLight(0xffffff, 0x38bdf8, 0.6);
+        scene.add(hemiLight);
+
+        function createCatPlayer() {
+            const catGroup = new THREE.Group();
+
+            // Materials
+            const gingerOrange = new THREE.MeshLambertMaterial({ color: 0xf97316 }); // Vibrant Tabby Orange
+            const whiteFur = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const darkPink = new THREE.MeshLambertMaterial({ color: 0xf43f5e });
+            const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0x15803d }); // Emerald green eyes
+            const pupilMaterial = new THREE.MeshBasicMaterial({ color: 0x09090b });
+            const collarMaterial = new THREE.MeshLambertMaterial({ color: 0x3b82f6 });
+            const bellMaterial = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.8, roughness: 0.2 });
+
+            // Cat Body (chubby capsule/box)
+            const bodyGeo = new THREE.BoxGeometry(1.0, 0.9, 1.6);
+            const bodyMesh = new THREE.Mesh(bodyGeo, gingerOrange);
+            bodyMesh.position.y = 0.8;
+            bodyMesh.castShadow = true;
+            catGroup.add(bodyMesh);
+
+            // White belly patch
+            const bellyGeo = new THREE.BoxGeometry(0.8, 0.1, 1.2);
+            const bellyMesh = new THREE.Mesh(bellyGeo, whiteFur);
+            bellyMesh.position.set(0, 0.4, 0);
+            catGroup.add(bellyMesh);
+
+            // Cat Head
+            const headGeo = new THREE.BoxGeometry(0.9, 0.8, 0.85);
+            const headMesh = new THREE.Mesh(headGeo, gingerOrange);
+            headMesh.position.set(0, 1.25, 0.7);
+            headMesh.castShadow = true;
+            catGroup.add(headMesh);
+
+            // Cat Ears (Pyramid / Cones)
+            const earGeo = new THREE.ConeGeometry(0.22, 0.35, 4);
+            const leftEar = new THREE.Mesh(earGeo, gingerOrange);
+            leftEar.position.set(-0.3, 1.75, 0.75);
+            leftEar.rotation.y = Math.PI / 4;
+            catGroup.add(leftEar);
+
+            const rightEar = leftEar.clone();
+            rightEar.position.x = 0.3;
+            catGroup.add(rightEar);
+
+            // Inner ears (pink)
+            const innerEarGeo = new THREE.ConeGeometry(0.12, 0.22, 4);
+            const innerLeft = new THREE.Mesh(innerEarGeo, darkPink);
+            innerLeft.position.set(-0.3, 1.74, 0.78);
+            innerLeft.rotation.y = Math.PI / 4;
+            catGroup.add(innerLeft);
+
+            const innerRight = innerLeft.clone();
+            innerRight.position.x = 0.3;
+            catGroup.add(innerRight);
+
+            // Eyes
+            const eyeGeo = new THREE.BoxGeometry(0.18, 0.18, 0.05);
+            const pupilGeo = new THREE.BoxGeometry(0.08, 0.15, 0.07);
+
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMaterial);
+            leftEye.position.set(-0.25, 1.32, 1.14);
+            const leftPupil = new THREE.Mesh(pupilGeo, pupilMaterial);
+            leftPupil.position.set(-0.25, 1.32, 1.15);
+            catGroup.add(leftEye, leftPupil);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMaterial);
+            rightEye.position.set(0.25, 1.32, 1.14);
+            const rightPupil = new THREE.Mesh(pupilGeo, pupilMaterial);
+            rightPupil.position.set(0.25, 1.32, 1.15);
+            catGroup.add(rightEye, rightPupil);
+
+            // Snout & Pink Nose
+            const snoutGeo = new THREE.BoxGeometry(0.35, 0.22, 0.2);
+            const snoutMesh = new THREE.Mesh(snoutGeo, whiteFur);
+            snoutMesh.position.set(0, 1.12, 1.16);
+            catGroup.add(snoutMesh);
+
+            const noseGeo = new THREE.BoxGeometry(0.12, 0.09, 0.06);
+            const noseMesh = new THREE.Mesh(noseGeo, darkPink);
+            noseMesh.position.set(0, 1.2, 1.27);
+            catGroup.add(noseMesh);
+
+            // Whiskers (Thin black lines)
+            const whiskerMat = new THREE.LineBasicMaterial({ color: 0x334155, linewidth: 2 });
+            const leftWhiskerPoints = [new THREE.Vector3(-0.15, 1.12, 1.2), new THREE.Vector3(-0.6, 1.16, 1.25)];
+            const leftWhiskerGeo = new THREE.BufferGeometry().setFromPoints(leftWhiskerPoints);
+            const leftWLine = new THREE.Line(leftWhiskerGeo, whiskerMat);
+            catGroup.add(leftWLine);
+
+            const rightWhiskerPoints = [new THREE.Vector3(0.15, 1.12, 1.2), new THREE.Vector3(0.6, 1.16, 1.25)];
+            const rightWhiskerGeo = new THREE.BufferGeometry().setFromPoints(rightWhiskerPoints);
+            const rightWLine = new THREE.Line(rightWhiskerGeo, whiskerMat);
+            catGroup.add(rightWLine);
+
+            // Collar and Bell
+            const collarGeo = new THREE.CylinderGeometry(0.48, 0.52, 0.12, 16);
+            const collarMesh = new THREE.Mesh(collarGeo, collarMaterial);
+            collarMesh.position.set(0, 0.98, 0.6);
+            catGroup.add(collarMesh);
+
+            const bellGeo = new THREE.SphereGeometry(0.09, 8, 8);
+            const bellMesh = new THREE.Mesh(bellGeo, bellMaterial);
+            bellMesh.position.set(0, 0.9, 0.95);
+            catGroup.add(bellMesh);
+
+            // 4 Legs
+            const legGeo = new THREE.BoxGeometry(0.24, 0.45, 0.26);
+            const paws = [];
+            const legOffsets = [
+                [-0.32, 0.22, 0.45], // front left
+                [ 0.32, 0.22, 0.45], // front right
+                [-0.32, 0.22, -0.45], // rear left
+                [ 0.32, 0.22, -0.45]  // rear right
+            ];
+
+            legOffsets.forEach(pos => {
+                const leg = new THREE.Mesh(legGeo, gingerOrange);
+                leg.position.set(pos[0], pos[1], pos[2]);
+                leg.castShadow = true;
+                catGroup.add(leg);
+                paws.push(leg);
+            });
+
+            // Cat Tail with joints
+            const tailGroup = new THREE.Group();
+            tailGroup.position.set(0, 0.95, -0.8);
+            const tailSegmentGeo = new THREE.CylinderGeometry(0.08, 0.1, 0.45, 8);
+            const tailSeg1 = new THREE.Mesh(tailSegmentGeo, gingerOrange);
+            tailSeg1.position.set(0, 0.2, -0.15);
+            tailSeg1.rotation.x = -Math.PI / 4;
+            tailGroup.add(tailSeg1);
+
+            const tailSeg2 = new THREE.Mesh(tailSegmentGeo, whiteFur);
+            tailSeg2.position.set(0, 0.5, -0.3);
+            tailSeg2.rotation.x = -Math.PI / 8;
+            tailGroup.add(tailSeg2);
+            catGroup.add(tailGroup);
+
+            // Surfer Hoverboard (gives that authentic Subway Surfers feel!)
+            const boardGeo = new THREE.BoxGeometry(1.2, 0.12, 2.2);
+            const boardMat = new THREE.MeshLambertMaterial({ color: 0x38bdf8 });
+            const boardMesh = new THREE.Mesh(boardGeo, boardMat);
+            boardMesh.position.set(0, 0.06, 0);
+            boardMesh.castShadow = true;
+
+            // Decal stripes on board
+            const stripeGeo = new THREE.BoxGeometry(0.25, 0.13, 2.22);
+            const stripeMat = new THREE.MeshLambertMaterial({ color: 0xfacc15 });
+            const stripeMesh = new THREE.Mesh(stripeGeo, stripeMat);
+            boardMesh.add(stripeMesh);
+            catGroup.add(boardMesh);
+
+            catGroup.userData = {
+                paws: paws,
+                tail: tailGroup,
+                board: boardMesh,
+                head: headMesh
+            };
+
+            return catGroup;
+        }
+
+        function createVetChaser() {
+            const vetGroup = new THREE.Group();
+
+            // Materials
+            const coatMat = new THREE.MeshLambertMaterial({ color: 0xf8fafc }); // Crisp white doctor coat
+            const scrubMat = new THREE.MeshLambertMaterial({ color: 0x0284c7 }); // Medical blue scrubs
+            const skinMat = new THREE.MeshLambertMaterial({ color: 0xfbbf24 });
+            const hairMat = new THREE.MeshLambertMaterial({ color: 0x475569 }); // Graying hair
+            const glassMat = new THREE.MeshStandardMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.6 });
+            const liquidMat = new THREE.MeshBasicMaterial({ color: 0x22c55e }); // Glowing green vaccine!
+
+            // Torso / White Lab Coat
+            const bodyGeo = new THREE.BoxGeometry(1.2, 1.6, 0.9);
+            const bodyMesh = new THREE.Mesh(bodyGeo, coatMat);
+            bodyMesh.position.y = 1.6;
+            bodyMesh.castShadow = true;
+            vetGroup.add(bodyMesh);
+
+            // Stethoscope around neck
+            const stethGeo = new THREE.TorusGeometry(0.4, 0.05, 8, 16, Math.PI);
+            const stethMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            const stethMesh = new THREE.Mesh(stethGeo, stethMat);
+            stethMesh.position.set(0, 2.2, 0.35);
+            stethMesh.rotation.x = Math.PI / 2.5;
+            vetGroup.add(stethMesh);
+
+            // Head
+            const headGeo = new THREE.BoxGeometry(0.85, 0.85, 0.8);
+            const headMesh = new THREE.Mesh(headGeo, skinMat);
+            headMesh.position.set(0, 2.7, 0);
+            headMesh.castShadow = true;
+            vetGroup.add(headMesh);
+
+            // Hair / Doctor Cap
+            const hairGeo = new THREE.BoxGeometry(0.9, 0.3, 0.85);
+            const hairMesh = new THREE.Mesh(hairGeo, scrubMat);
+            hairMesh.position.set(0, 3.15, 0);
+            vetGroup.add(hairMesh);
+
+            // Glasses
+            const glassGeo = new THREE.BoxGeometry(0.75, 0.22, 0.06);
+            const glasses = new THREE.Mesh(glassGeo, glassMat);
+            glasses.position.set(0, 2.75, 0.44);
+            vetGroup.add(glasses);
+
+            // Legs
+            const legGeo = new THREE.BoxGeometry(0.38, 1.0, 0.4);
+            const leftLeg = new THREE.Mesh(legGeo, scrubMat);
+            leftLeg.position.set(-0.35, 0.5, 0);
+            leftLeg.castShadow = true;
+            vetGroup.add(leftLeg);
+
+            const rightLeg = leftLeg.clone();
+            rightLeg.position.x = 0.35;
+            vetGroup.add(rightLeg);
+
+            // Arms & Giant Syringe in right hand!
+            const armGeo = new THREE.BoxGeometry(0.3, 1.1, 0.3);
+            const leftArm = new THREE.Mesh(armGeo, coatMat);
+            leftArm.position.set(-0.75, 1.8, 0);
+            leftArm.rotation.x = -Math.PI / 6;
+            vetGroup.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, coatMat);
+            rightArm.position.set(0.75, 1.8, 0.2);
+            rightArm.rotation.x = -Math.PI / 3;
+            vetGroup.add(rightArm);
+
+            // The Giant Vaccine Syringe!
+            const syringeGroup = new THREE.Group();
+            syringeGroup.position.set(0.85, 1.4, 0.8);
+            syringeGroup.rotation.x = -Math.PI / 2.5;
+
+            // Syringe barrel
+            const barrelGeo = new THREE.CylinderGeometry(0.18, 0.18, 1.2, 12);
+            const barrelMesh = new THREE.Mesh(barrelGeo, glassMat);
+            syringeGroup.add(barrelMesh);
+
+            // Glowing medicine inside
+            const liquidGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 12);
+            const liquidMesh = new THREE.Mesh(liquidGeo, liquidMat);
+            syringeGroup.add(liquidMesh);
+
+            // Plunger
+            const plungerGeo = new THREE.CylinderGeometry(0.06, 0.06, 0.6, 8);
+            const plungerMat = new THREE.MeshLambertMaterial({ color: 0xe2e8f0 });
+            const plungerMesh = new THREE.Mesh(plungerGeo, plungerMat);
+            plungerMesh.position.y = -0.7;
+            syringeGroup.add(plungerMesh);
+
+            // Needle
+            const needleGeo = new THREE.CylinderGeometry(0.02, 0.02, 0.7, 8);
+            const needleMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.9, roughness: 0.1 });
+            const needleMesh = new THREE.Mesh(needleGeo, needleMat);
+            needleMesh.position.y = 0.85;
+            syringeGroup.add(needleMesh);
+
+            vetGroup.add(syringeGroup);
+
+            vetGroup.userData = {
+                leftLeg,
+                rightLeg,
+                leftArm,
+                rightArm,
+                syringe: syringeGroup
+            };
+
+            return vetGroup;
+        }
+
+        const player = createCatPlayer();
+        scene.add(player);
+
+        const vetChaser = createVetChaser();
+        scene.add(vetChaser);
+
+        // Track and Obstacle Management
+        const trackChunks = [];
+        const activeObstacles = [];
+        const activeCollectibles = [];
+        const activeDecorations = [];
+
+        // Geometries and Materials for repeated track elements
+        const trackSlabGeo = new THREE.BoxGeometry(CONFIG.laneWidth * 3.6, 0.4, CONFIG.trackChunkLength);
+        const trackMat = new THREE.MeshLambertMaterial({ color: 0x334155 }); // Dark railway tarmac
+
+        const railGeo = new THREE.BoxGeometry(0.12, 0.2, CONFIG.trackChunkLength);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, metalness: 0.8, roughness: 0.3 });
+
+        const sleeperGeo = new THREE.BoxGeometry(CONFIG.laneWidth * 3.4, 0.1, 0.6);
+        const sleeperMat = new THREE.MeshLambertMaterial({ color: 0x5a4128 }); // Wood cross-ties
+
+        // Generate track chunk
+        function createTrackChunk(zPosition) {
+            const chunkGroup = new THREE.Group();
+            chunkGroup.position.z = zPosition;
+
+            // Ground base
+            const road = new THREE.Mesh(trackSlabGeo, trackMat);
+            road.position.y = -0.2;
+            road.receiveShadow = true;
+            chunkGroup.add(road);
+
+            // Sidewalk Curbs / Walls
+            const wallGeo = new THREE.BoxGeometry(0.8, 1.2, CONFIG.trackChunkLength);
+            const wallMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+            const leftWall = new THREE.Mesh(wallGeo, wallMat);
+            leftWall.position.set(-CONFIG.laneWidth * 1.8 - 0.4, 0.4, 0);
+            const rightWall = leftWall.clone();
+            rightWall.position.x = CONFIG.laneWidth * 1.8 + 0.4;
+            chunkGroup.add(leftWall, rightWall);
+
+            // Rails for the 3 lanes
+            CONFIG.lanes.forEach(laneX => {
+                const r1 = new THREE.Mesh(railGeo, railMat);
+                r1.position.set(laneX - 0.9, 0.05, 0);
+                const r2 = new THREE.Mesh(railGeo, railMat);
+                r2.position.set(laneX + 0.9, 0.05, 0);
+                chunkGroup.add(r1, r2);
+            });
+
+            // Wooden sleepers every 3 units
+            for (let z = -CONFIG.trackChunkLength / 2; z < CONFIG.trackChunkLength / 2; z += 3.0) {
+                const sleeper = new THREE.Mesh(sleeperGeo, sleeperMat);
+                sleeper.position.set(0, -0.05, z);
+                chunkGroup.add(sleeper);
+            }
+
+            // Distant colorful city buildings and Vet Clinic billboards
+            if (Math.random() > 0.3) {
+                const billboard = createBillboard();
+                billboard.position.set((Math.random() > 0.5 ? 1 : -1) * (CONFIG.laneWidth * 2.5), 3.5, 0);
+                chunkGroup.add(billboard);
+            }
+
+            scene.add(chunkGroup);
+            return chunkGroup;
+        }
+
+        function createBillboard() {
+            const group = new THREE.Group();
+            const poleGeo = new THREE.CylinderGeometry(0.12, 0.12, 4);
+            const poleMat = new THREE.MeshLambertMaterial({ color: 0x475569 });
+            const pole = new THREE.Mesh(poleGeo, poleMat);
+            pole.position.y = -1;
+            group.add(pole);
+
+            const boardGeo = new THREE.BoxGeometry(4.5, 2.2, 0.3);
+            const slogans = [0xf43f5e, 0x3b82f6, 0x10b981, 0xf59e0b];
+            const boardMat = new THREE.MeshLambertMaterial({ color: slogans[Math.floor(Math.random() * slogans.length)] });
+            const board = new THREE.Mesh(boardGeo, boardMat);
+            board.castShadow = true;
+            group.add(board);
+
+            return group;
+        }
+
+        // Obstacle 1: Low Hurdle (must jump over)
+        function createJumpHurdle(x, z) {
+            const hurdleGroup = new THREE.Group();
+            hurdleGroup.position.set(x, 0, z);
+
+            const postGeo = new THREE.BoxGeometry(0.2, 1.1, 0.2);
+            const barGeo = new THREE.BoxGeometry(CONFIG.laneWidth * 0.9, 0.3, 0.2);
+            const mat = new THREE.MeshLambertMaterial({ color: 0xf59e0b }); // Bright safety orange
+
+            const leftPost = new THREE.Mesh(postGeo, mat);
+            leftPost.position.set(-CONFIG.laneWidth * 0.4, 0.55, 0);
+            const rightPost = leftPost.clone();
+            rightPost.position.x = CONFIG.laneWidth * 0.4;
+
+            const bar = new THREE.Mesh(barGeo, mat);
+            bar.position.set(0, 0.85, 0);
+            bar.castShadow = true;
+
+            // Caution stripes
+            const stripeGeo = new THREE.BoxGeometry(0.3, 0.32, 0.22);
+            const stripeMat = new THREE.MeshLambertMaterial({ color: 0x09090b });
+            for (let i = -1; i <= 1; i++) {
+                const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+                stripe.position.set(i * 0.6, 0.85, 0);
+                hurdleGroup.add(stripe);
+            }
+
+            hurdleGroup.add(leftPost, rightPost, bar);
+            hurdleGroup.userData = {
+                type: 'JUMP_HURDLE',
+                bbox: new THREE.Box3(),
+                laneX: x,
+                height: 1.1,
+                cleared: false
+            };
+            scene.add(hurdleGroup);
+            return hurdleGroup;
+        }
+
+        // Obstacle 2: High Barricade / Pipe (must slide under)
+        function createSlideBarrier(x, z) {
+            const barrierGroup = new THREE.Group();
+            barrierGroup.position.set(x, 0, z);
+
+            const highPostGeo = new THREE.BoxGeometry(0.2, 3.2, 0.2);
+            const highBarGeo = new THREE.BoxGeometry(CONFIG.laneWidth * 0.95, 1.4, 0.3);
+            const postMat = new THREE.MeshLambertMaterial({ color: 0x64748b });
+            const signMat = new THREE.MeshLambertMaterial({ color: 0xef4444 }); // Danger Red
+
+            const p1 = new THREE.Mesh(highPostGeo, postMat);
+            p1.position.set(-CONFIG.laneWidth * 0.42, 1.6, 0);
+            const p2 = p1.clone();
+            p2.position.x = CONFIG.laneWidth * 0.42;
+
+            const sign = new THREE.Mesh(highBarGeo, signMat);
+            sign.position.set(0, 2.2, 0); // elevated gap at bottom: 2.2 - 0.7 = 1.5 clearance!
+            sign.castShadow = true;
+
+            // Stethoscope icon / emblem on sign
+            const iconGeo = new THREE.TorusGeometry(0.35, 0.08, 8, 12);
+            const iconMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const icon = new THREE.Mesh(iconGeo, iconMat);
+            icon.position.set(0, 2.2, 0.18);
+            barrierGroup.add(icon);
+
+            barrierGroup.add(p1, p2, sign);
+            barrierGroup.userData = {
+                type: 'SLIDE_BARRIER',
+                bbox: new THREE.Box3(),
+                laneX: x,
+                minClearanceY: 1.4,
+                cleared: false
+            };
+            scene.add(barrierGroup);
+            return barrierGroup;
+        }
+
+        // Obstacle 3: Vet Ambulance Train Car (must dodge lane!)
+        function createVetAmbulance(x, z) {
+            const ambGroup = new THREE.Group();
+            ambGroup.position.set(x, 0, z);
+
+            const bodyGeo = new THREE.BoxGeometry(2.3, 3.2, 7.5);
+            const bodyMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.6;
+            body.castShadow = true;
+            ambGroup.add(body);
+
+            // Red Emergency Stripe
+            const stripeGeo = new THREE.BoxGeometry(2.34, 0.5, 7.52);
+            const stripeMat = new THREE.MeshLambertMaterial({ color: 0xef4444 });
+            const stripe = new THREE.Mesh(stripeGeo, stripeMat);
+            stripe.position.y = 1.8;
+            ambGroup.add(stripe);
+
+            // Windshield / Windows
+            const winGeo = new THREE.BoxGeometry(2.1, 0.9, 0.1);
+            const winMat = new THREE.MeshLambertMaterial({ color: 0x1e293b });
+            const frontWin = new THREE.Mesh(winGeo, winMat);
+            frontWin.position.set(0, 2.3, -3.76);
+            ambGroup.add(frontWin);
+
+            // Siren on top
+            const sirenGeo = new THREE.CylinderGeometry(0.2, 0.25, 0.3, 10);
+            const sirenMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+            const siren = new THREE.Mesh(sirenGeo, sirenMat);
+            siren.position.set(0, 3.35, -2.2);
+            ambGroup.add(siren);
+
+            ambGroup.userData = {
+                type: 'AMBULANCE',
+                bbox: new THREE.Box3(),
+                laneX: x,
+                cleared: false
+            };
+            scene.add(ambGroup);
+            return ambGroup;
+        }
+
+        // Fish Bone Collectible
+        function createFishBone(x, y, z) {
+            const fishGroup = new THREE.Group();
+            fishGroup.position.set(x, y, z);
+
+            const goldMat = new THREE.MeshStandardMaterial({
+                color: 0xfbbf24,
+                metalness: 0.85,
+                roughness: 0.15,
+                emissive: 0xd97706,
+                emissiveIntensity: 0.3
+            });
+
+            // Spine
+            const spineGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.8, 8);
+            const spine = new THREE.Mesh(spineGeo, goldMat);
+            spine.rotation.z = Math.PI / 2;
+            fishGroup.add(spine);
+
+            // Head (Triangle)
+            const headGeo = new THREE.ConeGeometry(0.2, 0.35, 4);
+            const head = new THREE.Mesh(headGeo, goldMat);
+            head.position.x = 0.45;
+            head.rotation.z = -Math.PI / 2;
+            fishGroup.add(head);
+
+            // Tail
+            const tailGeo = new THREE.ConeGeometry(0.18, 0.25, 4);
+            const tail = new THREE.Mesh(tailGeo, goldMat);
+            tail.position.x = -0.45;
+            tail.rotation.z = Math.PI / 2;
+            fishGroup.add(tail);
+
+            // Ribs
+            const ribGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.4, 6);
+            for (let i = -2; i <= 2; i++) {
+                if (i === 0) continue;
+                const rib = new THREE.Mesh(ribGeo, goldMat);
+                rib.position.x = i * 0.1;
+                fishGroup.add(rib);
+            }
+
+            fishGroup.userData = {
+                type: 'FISH_BONE',
+                collected: false
+            };
+            scene.add(fishGroup);
+            return fishGroup;
+        }
+
+        // Catnip Super Speed Pouch
+        function createCatnipBag(x, y, z) {
+            const catnipGroup = new THREE.Group();
+            catnipGroup.position.set(x, y, z);
+
+            const bagMat = new THREE.MeshStandardMaterial({
+                color: 0x10b981,
+                emissive: 0x059669,
+                emissiveIntensity: 0.5,
+                roughness: 0.3
+            });
+
+            const pouchGeo = new THREE.DodecahedronGeometry(0.38);
+            const pouch = new THREE.Mesh(pouchGeo, bagMat);
+            catnipGroup.add(pouch);
+
+            catnipGroup.userData = {
+                type: 'CATNIP',
+                collected: false
+            };
+            scene.add(catnipGroup);
+            return catnipGroup;
+        }
+
+        let lastObstacleZ = 20;
+
+        function populateTrackChunk(chunkZ) {
+            const startZ = chunkZ - CONFIG.trackChunkLength / 2;
+            const endZ = chunkZ + CONFIG.trackChunkLength / 2;
+
+            for (let z = startZ + 12; z < endZ - 8; z += 16) {
+                if (z < 25) continue; // Keep runway clear at start
+
+                // Ensure at least one lane is completely safe
+                const availableLanes = [0, 1, 2];
+                // Shuffle lanes
+                availableLanes.sort(() => Math.random() - 0.5);
+
+                const blockedLaneCount = Math.random() < 0.65 ? 2 : 1; // 1 or 2 lanes obstructed
+                const chosenLanes = availableLanes.slice(0, blockedLaneCount);
+
+                chosenLanes.forEach(laneIdx => {
+                    const laneX = CONFIG.lanes[laneIdx];
+                    const rand = Math.random();
+
+                    if (rand < 0.4) {
+                        activeObstacles.push(createJumpHurdle(laneX, z));
+                    } else if (rand < 0.75) {
+                        activeObstacles.push(createSlideBarrier(laneX, z));
+                    } else {
+                        activeObstacles.push(createVetAmbulance(laneX, z));
+                    }
+                });
+
+                // Spawn fish on the clear lane or arching over hurdles!
+                const freeLaneIdx = availableLanes[blockedLaneCount === 2 ? 2 : 1];
+                const freeLaneX = CONFIG.lanes[freeLaneIdx];
+
+                for (let fz = -4; fz <= 4; fz += 2) {
+                    activeCollectibles.push(createFishBone(freeLaneX, 0.9, z + fz));
+                }
+
+                // Chance to spawn catnip pouch
+                if (Math.random() < 0.12) {
+                    activeCollectibles.push(createCatnipBag(freeLaneX, 1.2, z + 8));
+                }
+            }
+        }
+
+        // Initialize first chunks
+        function initWorld() {
+            for (let i = 0; i < CONFIG.visibleChunks; i++) {
+                const z = i * CONFIG.trackChunkLength;
+                const chunk = createTrackChunk(z);
+                trackChunks.push(chunk);
+                populateTrackChunk(z);
+            }
+        }
+
+        function moveLeft() {
+            if (!STATE.isRunning || STATE.isPaused) return;
+            if (STATE.currentLane > 0) {
+                STATE.currentLane--;
+                STATE.targetLaneX = CONFIG.lanes[STATE.currentLane];
+            }
+        }
+
+        function moveRight() {
+            if (!STATE.isRunning || STATE.isPaused) return;
+            if (STATE.currentLane < CONFIG.lanes.length - 1) {
+                STATE.currentLane++;
+                STATE.targetLaneX = CONFIG.lanes[STATE.currentLane];
+            }
+        }
+
+        function jump() {
+            if (!STATE.isRunning || STATE.isPaused) return;
+            if (!STATE.isJumping) {
+                STATE.isJumping = true;
+                STATE.velocityY = CONFIG.jumpImpulse;
+                // Cancel slide if jumping
+                STATE.isSliding = false;
+                audio.playJump();
+            }
+        }
+
+        function slide() {
+            if (!STATE.isRunning || STATE.isPaused) return;
+            if (!STATE.isSliding) {
+                STATE.isSliding = true;
+                STATE.slideTimer = CONFIG.slideDuration;
+                // Fast-fall if sliding mid-air
+                if (STATE.isJumping) {
+                    STATE.velocityY = -22;
+                }
+                audio.playSlide();
+            }
+        }
+
+        // Keyboard handler
+        window.addEventListener('keydown', (e) => {
+            switch (e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft();
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight();
+                    break;
+                case 'ArrowUp':
+                case 'KeyW':
+                case 'Space':
+                    e.preventDefault();
+                    jump();
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    e.preventDefault();
+                    slide();
+                    break;
+                case 'KeyP':
+                    togglePause();
+                    break;
+            }
+        });
+
+        // Touch & Swipe Event Detection with Zero Latency & Fixed Orientation
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartTime = 0;
+        let swipeTriggered = false;
+
+        window.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                touchStartTime = performance.now();
+                swipeTriggered = false;
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+            if (!STATE.isRunning || swipeTriggered || e.touches.length !== 1) return;
+            const currentX = e.touches[0].clientX;
+            const currentY = e.touches[0].clientY;
+            const dx = currentX - touchStartX;
+            const dy = currentY - touchStartY;
+            const absX = Math.abs(dx);
+            const absY = Math.abs(dy);
+            const swipeThreshold = 26;
+
+            if (absX > swipeThreshold || absY > swipeThreshold) {
+                if (absX > absY) {
+                    // Swipe right moves right, swipe left moves left
+                    if (dx > 0) moveRight();
+                    else moveLeft();
+                } else {
+                    // Swipe up jumps, swipe down slides
+                    if (dy < 0) jump();
+                    else slide();
+                }
+                swipeTriggered = true;
+            }
+        }, { passive: true });
+
+        window.addEventListener('touchend', (e) => {
+            if (!STATE.isRunning || swipeTriggered) return;
+            const touchEndX = e.changedTouches[0].clientX;
+            const touchEndY = e.changedTouches[0].clientY;
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+            const absX = Math.abs(dx);
+            const absY = Math.abs(dy);
+            const minSwipeDistance = 22;
+
+            if (absX > minSwipeDistance || absY > minSwipeDistance) {
+                if (absX > absY) {
+                    if (dx > 0) moveRight();
+                    else moveLeft();
+                } else {
+                    if (dy < 0) jump();
+                    else slide();
+                }
+            }
+        }, { passive: true });
+
+        // Mouse swipe drag detection for desktop preview testing
+        let isMouseDown = false;
+        let mouseStartX = 0;
+        let mouseStartY = 0;
+        let mouseSwipeTriggered = false;
+
+        window.addEventListener('mousedown', (e) => {
+            if (e.target.closest('button') || e.target.closest('#start-modal') || e.target.closest('#gameover-modal')) return;
+            isMouseDown = true;
+            mouseStartX = e.clientX;
+            mouseStartY = e.clientY;
+            mouseSwipeTriggered = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!STATE.isRunning || !isMouseDown || mouseSwipeTriggered) return;
+            const dx = e.clientX - mouseStartX;
+            const dy = e.clientY - mouseStartY;
+            const absX = Math.abs(dx);
+            const absY = Math.abs(dy);
+            const threshold = 28;
+
+            if (absX > threshold || absY > threshold) {
+                if (absX > absY) {
+                    if (dx > 0) moveRight();
+                    else moveLeft();
+                } else {
+                    if (dy < 0) jump();
+                    else slide();
+                }
+                mouseSwipeTriggered = true;
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            isMouseDown = false;
+        });
+
+        // Attach event listeners to on-screen touch buttons
+        const btnLeft = document.getElementById('btn-touch-left');
+        const btnRight = document.getElementById('btn-touch-right');
+        const btnJump = document.getElementById('btn-touch-jump');
+        const btnSlide = document.getElementById('btn-touch-slide');
+
+        if (btnLeft) btnLeft.addEventListener('click', (e) => { e.stopPropagation(); moveLeft(); });
+        if (btnRight) btnRight.addEventListener('click', (e) => { e.stopPropagation(); moveRight(); });
+        if (btnJump) btnJump.addEventListener('click', (e) => { e.stopPropagation(); jump(); });
+        if (btnSlide) btnSlide.addEventListener('click', (e) => { e.stopPropagation(); slide(); });
+
+        function triggerStumble() {
+            if (STATE.isZoomies) return; // Invincible during zoomies!
+            if (STATE.isStumbling) return;
+
+            STATE.isStumbling = true;
+            STATE.speed = Math.max(CONFIG.initialSpeed * 0.7, STATE.speed * 0.65);
+            // Vet lunges significantly closer!
+            STATE.vetDistance = Math.max(CONFIG.vetCatchDistance + 0.5, STATE.vetDistance - 3.5);
+            audio.playStumble();
+
+            // Flash danger UI
+            const dangerBox = document.getElementById('vet-danger-box');
+            dangerBox.classList.add('shake-danger');
+
+            setTimeout(() => {
+                STATE.isStumbling = false;
+                dangerBox.classList.remove('shake-danger');
+            }, 1200);
+        }
+
+        const clock = new THREE.Clock();
+        let animTime = 0;
+
+        function updateGame(delta) {
+            if (!STATE.isRunning || STATE.isPaused) return;
+
+            animTime += delta * 12;
+
+            // 1. Update Distance & Speed progression
+            const currentSpeed = STATE.isZoomies ? STATE.speed * 1.5 : STATE.speed;
+            const stepZ = currentSpeed * delta;
+            player.position.z += stepZ;
+            STATE.distance += stepZ;
+            STATE.score += Math.floor(stepZ * (STATE.isZoomies ? 3 : 1));
+
+            if (STATE.speed < CONFIG.maxSpeed && !STATE.isZoomies) {
+                STATE.speed += CONFIG.speedIncrement * delta;
+            }
+
+            // 2. Lateral Lane Interpolation (Smooth dodging)
+            player.position.x += (STATE.targetLaneX - player.position.x) * 14 * delta;
+            // Banking tilt during turns
+            const turnDelta = STATE.targetLaneX - player.position.x;
+            player.rotation.z = -turnDelta * 0.12;
+
+            // 3. Jump Physics
+            if (STATE.isJumping) {
+                STATE.velocityY += CONFIG.gravity * delta;
+                STATE.playerY += STATE.velocityY * delta;
+
+                if (STATE.playerY <= 0) {
+                    STATE.playerY = 0;
+                    STATE.velocityY = 0;
+                    STATE.isJumping = false;
+                }
+            }
+            player.position.y = STATE.playerY;
+
+            // 4. Slide Duration and Squash/Stretch
+            if (STATE.isSliding) {
+                STATE.slideTimer -= delta;
+                // Squash the cat model flat
+                player.scale.set(1.2, 0.45, 1.4);
+                if (STATE.slideTimer <= 0) {
+                    STATE.isSliding = false;
+                    player.scale.set(1, 1, 1);
+                }
+            } else if (!STATE.isJumping) {
+                player.scale.set(1, 1, 1);
+            }
+
+            // 5. Cat Animation (Paws running & tail swishing)
+            if (player.userData.paws) {
+                const legSwing = Math.sin(animTime);
+                player.userData.paws[0].rotation.x = legSwing * 0.8;
+                player.userData.paws[1].rotation.x = -legSwing * 0.8;
+                player.userData.paws[2].rotation.x = -legSwing * 0.8;
+                player.userData.paws[3].rotation.x = legSwing * 0.8;
+            }
+            if (player.userData.tail) {
+                player.userData.tail.rotation.y = Math.sin(animTime * 0.7) * 0.4;
+            }
+
+            // 6. Super Catnip Zoomies Timer
+            if (STATE.isZoomies) {
+                STATE.zoomiesTimer -= delta;
+                const percent = Math.max(0, (STATE.zoomiesTimer / 6) * 100);
+                document.getElementById('zoomies-bar').style.width = percent + '%';
+                document.getElementById('zoomies-timer').textContent = Math.ceil(STATE.zoomiesTimer) + 's';
+
+                if (STATE.zoomiesTimer <= 0) {
+                    STATE.isZoomies = false;
+                    document.getElementById('zoomies-container').classList.add('hidden');
+                }
+            }
+
+            // 7. Vet Chaser AI & Position Update
+            // Slowly recover distance if running safely, but catch up on mistakes
+            if (!STATE.isStumbling && STATE.vetDistance < CONFIG.vetMaxDistance) {
+                STATE.vetDistance += delta * 0.8;
+            } else if (STATE.isStumbling) {
+                STATE.vetDistance -= delta * CONFIG.vetCatchSpeed;
+            }
+
+            // Position Vet directly behind the cat
+            vetChaser.position.x += (player.position.x - vetChaser.position.x) * 6 * delta;
+            vetChaser.position.z = player.position.z - STATE.vetDistance;
+            vetChaser.position.y = 0;
+
+            // Animate Vet running limbs & swinging syringe
+            if (vetChaser.userData.leftLeg) {
+                const vetSwing = Math.sin(animTime * 1.2);
+                vetChaser.userData.leftLeg.rotation.x = vetSwing * 0.9;
+                vetChaser.userData.rightLeg.rotation.x = -vetSwing * 0.9;
+                vetChaser.userData.leftArm.rotation.x = -vetSwing * 0.8;
+                vetChaser.userData.syringe.rotation.z = Math.sin(animTime * 2) * 0.15;
+            }
+
+            // Vet Caught Check (Game Over!)
+            if (STATE.vetDistance <= CONFIG.vetCatchDistance) {
+                triggerGameOver("Dr. Snip caught you! Ready for your booster shots?");
+                return;
+            }
+
+            // 8. Dynamic Camera Positioning (Third person cinematic chase)
+            camera.position.x += (player.position.x * 0.7 - camera.position.x) * 10 * delta;
+            camera.position.z = player.position.z - 7.5;
+            camera.position.y = 4.2 + (STATE.playerY * 0.4);
+            camera.lookAt(player.position.x * 0.4, 1.6 + STATE.playerY * 0.2, player.position.z + 8);
+
+            // 9. Chunk Recycling (Endless Track loop)
+            const firstChunk = trackChunks[0];
+            if (firstChunk && firstChunk.position.z + CONFIG.trackChunkLength < player.position.z - 20) {
+                // Move chunk to the front
+                const lastChunk = trackChunks[trackChunks.length - 1];
+                const newZ = lastChunk.position.z + CONFIG.trackChunkLength;
+                firstChunk.position.z = newZ;
+                trackChunks.push(trackChunks.shift());
+                populateTrackChunk(newZ);
+            }
+
+            // 10. Obstacle Collision Checking
+            checkObstacleCollisions();
+
+            // 11. Collectibles Updating & Collision Checking
+            checkCollectibleCollisions(delta);
+
+            // 12. Cleanup off-screen items
+            cleanupOldEntities();
+
+            // 13. Update UI HUD elements
+            updateHUD();
+        }
+
+        function checkObstacleCollisions() {
+            const playerBox = new THREE.Box3().setFromObject(player);
+
+            for (let i = 0; i < activeObstacles.length; i++) {
+                const obs = activeObstacles[i];
+                if (obs.userData.cleared) continue;
+
+                // Fast distance skip
+                const distZ = obs.position.z - player.position.z;
+                if (Math.abs(distZ) > 6) continue;
+
+                // Check lane alignment
+                const laneDiff = Math.abs(obs.userData.laneX - player.position.x);
+                if (laneDiff < 1.4) {
+                    if (obs.userData.type === 'JUMP_HURDLE') {
+                        // Must be jumping sufficiently high
+                        if (STATE.playerY < 0.95 && Math.abs(distZ) < 1.0) {
+                            obs.userData.cleared = true;
+                            triggerStumble();
+                        }
+                    } else if (obs.userData.type === 'SLIDE_BARRIER') {
+                        // Must be sliding flat on the ground
+                        if (!STATE.isSliding && Math.abs(distZ) < 1.2) {
+                            obs.userData.cleared = true;
+                            triggerStumble();
+                        }
+                    } else if (obs.userData.type === 'AMBULANCE') {
+                        // Tall obstacle: cannot be jumped over or slid under!
+                        if (Math.abs(distZ) < 3.8) {
+                            obs.userData.cleared = true;
+                            if (STATE.isZoomies) {
+                                // Knock away ambulance during zoomies!
+                                obs.position.y += 10;
+                            } else {
+                                triggerGameOver("CRASH! You ran head-first into the Animal Hospital Van!");
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function checkCollectibleCollisions(delta) {
+            for (let i = 0; i < activeCollectibles.length; i++) {
+                const item = activeCollectibles[i];
+                if (item.userData.collected) continue;
+
+                // Spin animation
+                item.rotation.y += 3.5 * delta;
+
+                const dx = item.position.x - player.position.x;
+                const dy = item.position.y - (player.position.y + 0.8);
+                const dz = item.position.z - player.position.z;
+                const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+                // Magnet radius if zoomies is active!
+                const pickupRadius = STATE.isZoomies ? 3.5 : 1.4;
+
+                if (dist < pickupRadius) {
+                    item.userData.collected = true;
+                    scene.remove(item);
+
+                    if (item.userData.type === 'FISH_BONE') {
+                        STATE.fishBones++;
+                        STATE.score += 50;
+                        audio.playFish();
+                    } else if (item.userData.type === 'CATNIP') {
+                        STATE.isZoomies = true;
+                        STATE.zoomiesTimer = 6.0;
+                        document.getElementById('zoomies-container').classList.remove('hidden');
+                        audio.playCatnip();
+                    }
+                }
+            }
+        }
+
+        function cleanupOldEntities() {
+            const cutoffZ = player.position.z - 25;
+
+            // Clean obstacles
+            for (let i = activeObstacles.length - 1; i >= 0; i--) {
+                const obs = activeObstacles[i];
+                if (obs.position.z < cutoffZ) {
+                    scene.remove(obs);
+                    activeObstacles.splice(i, 1);
+                }
+            }
+
+            // Clean collectibles
+            for (let i = activeCollectibles.length - 1; i >= 0; i--) {
+                const col = activeCollectibles[i];
+                if (col.position.z < cutoffZ || col.userData.collected) {
+                    scene.remove(col);
+                    activeCollectibles.splice(i, 1);
+                }
+            }
+        }
+
+        function updateHUD() {
+            document.getElementById('hud-score').textContent = String(STATE.score).padStart(5, '0');
+            document.getElementById('hud-fish-count').textContent = STATE.fishBones;
+            document.getElementById('hud-distance').textContent = Math.floor(STATE.distance) + 'm';
+
+            // Vet Proximity Text
+            const proxText = document.getElementById('vet-proximity-text');
+            const dangerBox = document.getElementById('vet-danger-box');
+
+            if (STATE.vetDistance < 3.8) {
+                proxText.textContent = "CRITICAL!";
+                proxText.className = "text-xs font-black text-rose-500 uppercase tracking-tighter animate-pulse";
+                dangerBox.style.borderColor = "rgba(239, 68, 68, 0.9)";
+            } else if (STATE.vetDistance < 6.5) {
+                proxText.textContent = "CLOSING IN!";
+                proxText.className = "text-xs font-black text-amber-400 uppercase tracking-tighter";
+                dangerBox.style.borderColor = "rgba(245, 158, 11, 0.7)";
+            } else {
+                proxText.textContent = "SAFE DISTANCE";
+                proxText.className = "text-xs font-black text-emerald-400 uppercase tracking-tighter";
+                dangerBox.style.borderColor = "rgba(16, 185, 129, 0.3)";
+            }
+        }
+
+        function startGame() {
+            audio.init();
+            document.getElementById('start-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.add('hidden');
+
+            // Reset States
+            STATE.isRunning = true;
+            STATE.isPaused = false;
+            STATE.score = 0;
+            STATE.distance = 0;
+            STATE.fishBones = 0;
+            STATE.speed = CONFIG.initialSpeed;
+            STATE.currentLane = 1;
+            STATE.targetLaneX = CONFIG.lanes[1];
+            STATE.playerY = 0;
+            STATE.velocityY = 0;
+            STATE.isJumping = false;
+            STATE.isSliding = false;
+            STATE.isZoomies = false;
+            STATE.vetDistance = 8.5;
+            STATE.isStumbling = false;
+
+            player.position.set(CONFIG.lanes[1], 0, 0);
+            vetChaser.position.set(CONFIG.lanes[1], 0, -8.5);
+
+            // Clear old obstacles
+            activeObstacles.forEach(o => scene.remove(o));
+            activeObstacles.length = 0;
+            activeCollectibles.forEach(c => scene.remove(c));
+            activeCollectibles.length = 0;
+
+            // Reset tracks
+            trackChunks.forEach(t => scene.remove(t));
+            trackChunks.length = 0;
+            initWorld();
+        }
+
+        function triggerGameOver(reasonMessage) {
+            STATE.isRunning = false;
+            audio.playGameOver();
+
+            // Save High Score
+            if (STATE.score > STATE.highScore) {
+                STATE.highScore = STATE.score;
+                localStorage.setItem('cat_surfer_best', STATE.highScore.toString());
+            }
+
+            document.getElementById('gameover-subtext').textContent = reasonMessage || "Dr. Snip caught you! Time for your shots!";
+            document.getElementById('final-score').textContent = STATE.score;
+            document.getElementById('final-distance').textContent = Math.floor(STATE.distance) + 'm';
+            document.getElementById('final-fish').textContent = STATE.fishBones;
+            document.getElementById('best-score').textContent = STATE.highScore;
+
+            document.getElementById('gameover-modal').classList.remove('hidden');
+        }
+
+        function togglePause() {
+            if (!STATE.isRunning) return;
+            STATE.isPaused = !STATE.isPaused;
+        }
+
+        document.getElementById('start-game-btn').addEventListener('click', startGame);
+        document.getElementById('restart-game-btn').addEventListener('click', startGame);
+
+        const audioToggleBtn = document.getElementById('audio-toggle-btn');
+        audioToggleBtn.addEventListener('click', () => {
+            STATE.soundMuted = !STATE.soundMuted;
+            audioToggleBtn.textContent = STATE.soundMuted ? '🔇' : '🔊';
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1);
+            updateGame(delta);
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function() {
+            initWorld();
+            animate();
+        };
+    </script>
+</body>
+</html>
